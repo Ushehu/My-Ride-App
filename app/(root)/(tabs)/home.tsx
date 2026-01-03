@@ -1,14 +1,8 @@
-import { View,
-   Text ,
-   TouchableOpacity,
-  Image,
-  FlatList,
-  ActivityIndicator,
-  } from 'react-native';
+import { View, Text, TouchableOpacity, Image, FlatList, ActivityIndicator, Alert, Linking, AppState } from 'react-native';
 import { useUser, useAuth } from "@clerk/clerk-expo";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as Location from "expo-location";
 
 import RideCard from '@/components/RideCard';
@@ -16,115 +10,23 @@ import GoogleTextInput from "@/components/GoogleTextInput";
 import Map from "@/components/Map";
 import { icons, images } from "@/constants";
 import { useLocationStore } from "@/store";
-  
-const recentRides = [
-  {
-    ride_id: 1,
-    origin_address: "Abuja, Nigeria",
-    destination_address: "Kaduna, Nigeria",
-    origin_latitude: 9.0574,
-    origin_longitude: 7.4898,
-    destination_latitude: 10.5105,
-    destination_longitude: 7.4165,
-    ride_time: 142,
-    fare_price: 5200.0,
-    payment_status: "paid",
-    driver_id: 1,
-    user_id: "1",
-    created_at: "2024-08-12 08:49:01.809053",
-    driver: {
-      driver_id: 1,
-      first_name: "James",
-      last_name: "Wilson",
-      profile_image_url: "https://ucarecdn.com/dae59769-2c1f-48c7-driver1.jpg",
-      car_image_url: "https://ucarecdn.com/a2dc52b2-8bf7-4e49-car1.jpg",
-      car_seats: 4,
-      rating: "4.80"
-    }
-  },
-  {
-    ride_id: 2,
-    origin_address: "Lagos, Nigeria",
-    destination_address: "Ibadan, Nigeria",
-    origin_latitude: 6.5244,
-    origin_longitude: 3.3792,
-    destination_latitude: 7.3775,
-    destination_longitude: 3.947,
-    ride_time: 176,
-    fare_price: 10500.0,
-    payment_status: "pending",
-    driver_id: 2,
-    user_id: "1",
-    created_at: "2024-08-14 11:20:45.002121",
-    driver: {
-      driver_id: 2,
-      first_name: "Maria",
-      last_name: "Lopez",
-      profile_image_url: "https://ucarecdn.com/1b84ac7e-driver2.jpg",
-      car_image_url: "https://ucarecdn.com/8cf42a3e-car2.jpg",
-      car_seats: 4,
-      rating: "4.92"
-    }
-  },
-  {
-    ride_id: 3,
-    origin_address: "Zagreb, Croatia",
-    destination_address: "Rijeka, Croatia",
-    origin_latitude: 45.815011,
-    origin_longitude: 15.981919,
-    destination_latitude: 45.327063,
-    destination_longitude: 14.442176,
-    ride_time: 124,
-    fare_price: 6200.0,
-    payment_status: "paid",
-    driver_id: 1,
-    user_id: "1",
-    created_at: "2024-08-12 08:49:01.809053",
-    driver: {
-      driver_id: 1,
-      first_name: "James",
-      last_name: "Wilson",
-      profile_image_url: "https://ucarecdn.com/dae59769-driver1.jpg",
-      car_image_url: "https://ucarecdn.com/a2dc52b2-car1.jpg",
-      car_seats: 4,
-      rating: "4.80"
-    }
-  },
-  {
-    ride_id: 4,
-    origin_address: "Nairobi, Kenya",
-    destination_address: "Thika, Kenya",
-    origin_latitude: -1.286389,
-    origin_longitude: 36.817223,
-    destination_latitude: -1.0334,
-    destination_longitude: 37.074,
-    ride_time: 52,
-    fare_price: 2500.0,
-    payment_status: "paid",
-    driver_id: 3,
-    user_id: "1",
-    created_at: "2024-08-20 14:10:11.102991",
-    driver: {
-      driver_id: 3,
-      first_name: "Ahmed",
-      last_name: "Khan",
-      profile_image_url: "https://ucarecdn.com/4c8d0201-driver3.jpg",
-      car_image_url: "https://ucarecdn.com/d6a72d30-car3.jpg",
-      car_seats: 3,
-      rating: "4.64"
-    }
-  }
-];
+import { useFetch } from "@/lib/fetch";
+import { Ride } from "@/types/type";
 
-export default function Page(){
+export default function Page() {
   const { setUserLocation, setDestinationLocation } = useLocationStore();
   const { user } = useUser();
   const { signOut } = useAuth();
   const [hasPermission, setHasPermission] = useState<boolean>(false);
+  const {
+    data: recentRides,
+    loading,
+    error,
+  } = useFetch<Ride[]>(`/(api)/ride/${user?.id}`);
   const [locationLoading, setLocationLoading] = useState(true);
-  
-  const loading = false; // Change this from true to false
-    
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const appState = useRef(AppState.currentState)
+
   const handleSignOut = async () => {
     await signOut();
     router.replace("/(auth)/sign-in");
@@ -139,49 +41,129 @@ export default function Page(){
     router.push("/(root)/find-ride");
   };
 
-useEffect(() => {
-  const requestLocation = async() => {
+  const requestLocation = async () => {
+    setLocationLoading(true);
+    setLocationError(null);
+
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      // First check if location services are enabled
+      const isLocationEnabled = await Location.hasServicesEnabledAsync();
       
+      if (!isLocationEnabled) {
+        setLocationError("location_disabled");
+        setLocationLoading(false);
+        setHasPermission(false);
+        
+        // Don't show alert - the UI already explains what to do
+        
+        return;
+      }
+
+      // Request location permissions
+      let { status } = await Location.requestForegroundPermissionsAsync();
+
       if (status !== "granted") {
+        setLocationError("permission_denied");
         setHasPermission(false);
         setLocationLoading(false);
+        
+        
         return;
       }
 
       setHasPermission(true);
-      
-      let location = await Location.getCurrentPositionAsync({});
 
-      // Just use coordinates as the address
+      // Get current position with timeout
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
       setUserLocation({
-        latitude: location.coords?.latitude,
-        longitude: location.coords?.longitude,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
         address: "Current Location",
       });
 
       setLocationLoading(false);
-      
-    } catch (error) {
+      setLocationError(null);
+
+    } catch (error: any) {
       console.error("Error getting location:", error);
       setLocationLoading(false);
       setHasPermission(false);
+
+      // Handle specific error cases
+      if (error.message?.includes("unavailable")) {
+        setLocationError("location_unavailable");
+        Alert.alert(
+          "Location Unavailable",
+          "Unable to get your current location. Please make sure:\n\n1. Location services are enabled\n2. You have a GPS signal\n3. You're not in airplane mode",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Try Again", onPress: () => requestLocation() }
+          ]
+        );
+      } else {
+        setLocationError("unknown_error");
+        Alert.alert(
+          "Location Error",
+          "An error occurred while getting your location. Please try again.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Retry", onPress: () => requestLocation() }
+          ]
+        );
+      }
     }
   };
-  
-  requestLocation();
-}, []);
+
+  useEffect(() => {
+    requestLocation();
+
+    // Listen for app state changes (when user comes back from settings)
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        
+        // App has come to foreground, retry location
+        if (locationError) {
+          requestLocation();
+        }
+      }
+
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Also retry when locationError changes (user dismissed an alert)
+  useEffect(() => {
+    if (locationError && !locationLoading) {
+      // Auto-retry after 2 seconds if there was an error
+      const timer = setTimeout(() => {
+        
+        requestLocation();
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [locationError]);
+
   return (
     <SafeAreaView className="bg-general-500">
-      <FlatList 
+      <FlatList
         data={recentRides?.slice(0, 5)}
         renderItem={({ item }) => <RideCard ride={item} />}
         keyExtractor={(item, index) => index.toString()}
         className="px-5"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          paddingBottom: 100,
+          paddingBottom: 120, // Extra space to avoid bottom overlap
         }}
         ListEmptyComponent={() => (
           <View className="flex flex-col items-center justify-center">
@@ -226,13 +208,86 @@ useEffect(() => {
               </Text>
               <View className="flex flex-row items-center bg-transparent h-[300px]">
                 {locationLoading ? (
-                  <View className="flex-1 items-center justify-center">
+                  <View className="flex-1 items-center justify-center bg-gray-100 rounded-2xl">
                     <ActivityIndicator size="large" color="#000" />
-                    <Text className="mt-2 text-sm text-gray-500">Loading location...</Text>
+                    <Text className="mt-2 text-sm text-gray-500">
+                      Getting your location...
+                    </Text>
+                  </View>
+                ) : locationError ? (
+                  <View className="flex-1 items-center justify-center bg-gray-100 rounded-2xl p-5">
+                    <View className="items-center mb-4">
+                      <View className="w-20 h-20 bg-red-100 rounded-full items-center justify-center mb-3">
+                        <Text className="text-4xl">📍</Text>
+                      </View>
+                      <Text className="text-lg font-bold text-gray-900 mb-2 text-center">
+                        {locationError === "location_disabled"
+                          ? "Location Services Disabled"
+                          : locationError === "permission_denied"
+                          ? "Location Permission Required"
+                          : "Location Unavailable"}
+                      </Text>
+                      <Text className="text-sm text-gray-600 text-center mb-1">
+                        {locationError === "location_disabled"
+                          ? "Please enable location in your device settings"
+                          : locationError === "permission_denied"
+                          ? "Grant location access to use MyRide"
+                          : "Unable to get your current location"}
+                      </Text>
+                      {locationError === "location_disabled" && (
+                        <View className="bg-blue-50 rounded-lg p-3 mt-3 mb-4">
+                          <Text className="text-xs text-blue-900 font-semibold mb-1">
+                            📱 Quick Steps:
+                          </Text>
+                          <Text className="text-xs text-blue-800">
+                            1. Tap "Open Settings" below{'\n'}
+                            2. Turn ON Location Services{'\n'}
+                            3. Return to MyRide (auto-refreshes)
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <View className="flex-row gap-2">
+                      {locationError === "location_disabled" && (
+                        <TouchableOpacity
+                          onPress={() => Linking.openSettings()}
+                          className="bg-blue-500 px-6 py-3 rounded-lg flex-1"
+                        >
+                          <Text className="text-white font-semibold text-center">
+                            Open Settings
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={requestLocation}
+                        className="bg-green-500 px-6 py-3 rounded-lg flex-1"
+                      >
+                        <Text className="text-white font-semibold text-center">
+                          Try Again
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text className="text-xs text-gray-500 text-center mt-3">
+                      Auto-checking in background...
+                    </Text>
                   </View>
                 ) : !hasPermission ? (
-                  <View className="flex-1 items-center justify-center">
-                    <Text className="text-sm text-gray-500">Location permission denied</Text>
+                  <View className="flex-1 items-center justify-center bg-gray-100 rounded-2xl p-5">
+                    <Text className="text-4xl mb-3">🔒</Text>
+                    <Text className="text-base font-semibold text-gray-900 mb-2 text-center">
+                      Location Access Required
+                    </Text>
+                    <Text className="text-sm text-gray-600 text-center mb-4">
+                      MyRide needs your location to show nearby drivers
+                    </Text>
+                    <TouchableOpacity
+                      onPress={requestLocation}
+                      className="bg-blue-500 px-6 py-3 rounded-lg"
+                    >
+                      <Text className="text-white font-semibold">
+                        Enable Location
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 ) : (
                   <Map />

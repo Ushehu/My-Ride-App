@@ -1,12 +1,12 @@
-import React, { useState } from "react";
-import { View, Text, ScrollView, Image, Alert, ActivityIndicator } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, ScrollView, Image, Alert, ActivityIndicator} from "react-native";
 import { router } from "expo-router";
 import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import { useUser } from "@clerk/clerk-expo";
+import { ReactNativeModal } from "react-native-modal";
 
 import RideLayout from "@/components/RideLayout";
-import { icons } from "@/constants";
-import { formatTime } from "@/lib/utils";
+import { icons, images } from "@/constants";
 import { useDriverStore, useLocationStore } from "@/store";
 import CustomButton from "@/components/CustomButton";
 import { fetchAPI } from "@/lib/fetch";
@@ -17,6 +17,9 @@ const BookRideContent = () => {
   const { drivers, selectedDriver } = useDriverStore();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [loading, setLoading] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   // Get selected driver details
   const driverDetails = drivers?.find(
@@ -27,18 +30,50 @@ const BookRideContent = () => {
   const pickupAddress = userAddress || "Pickup location not set";
   const dropoffAddress = destinationAddress || "Destination not set";
 
+  // Check if driver data is incomplete (missing price/time)
+  const isDriverDataIncomplete = !driverDetails || !driverDetails.price || !driverDetails.time;
+
   // Validate required data
   if (!driverDetails) {
     return (
       <RideLayout title="Book Ride" snapPoints={["55%"]}>
         <View className="flex-1 items-center justify-center px-5">
-          <Text className="text-lg text-gray-900 text-center">
-            No driver selected. Please go back and select a driver.
+          <Text className="text-lg text-gray-900 text-center mb-2">
+            No driver selected
+          </Text>
+          <Text className="text-sm text-gray-600 text-center mb-4">
+            Please go back and select a driver.
           </Text>
           <CustomButton
             title="Go Back"
             onPress={() => router.back()}
             className="mt-4"
+          />
+        </View>
+      </RideLayout>
+    );
+  }
+
+  // Show error if price/time data is missing
+  if (isDriverDataIncomplete) {
+    return (
+      <RideLayout title="Book Ride" snapPoints={["55%"]}>
+        <View className="flex-1 items-center justify-center px-5">
+          <View className="bg-yellow-50 rounded-2xl p-6 mb-4">
+            <Text className="text-lg font-bold text-gray-900 text-center mb-2">
+              ⚠️ Incomplete Route Data
+            </Text>
+            <Text className="text-sm text-gray-600 text-center mb-4">
+              Price and time information are missing. Please make sure you've selected both pickup and destination locations.
+            </Text>
+            <Text className="text-xs text-gray-500 text-center">
+              Missing: {!driverDetails.price ? "Price " : ""}{!driverDetails.time ? "Time" : ""}
+            </Text>
+          </View>
+          <CustomButton
+            title="Go Back to Map"
+            onPress={() => router.back()}
+            className="bg-yellow-500"
           />
         </View>
       </RideLayout>
@@ -51,6 +86,16 @@ const BookRideContent = () => {
       const amount = driverDetails.price?.toString() || "0";
       const driverName = user?.fullName || user?.emailAddresses[0]?.emailAddress?.split("@")[0] || "Guest";
       const driverEmail = user?.emailAddresses[0]?.emailAddress || "";
+
+      // Validate minimum amount
+      const numericAmount = parseFloat(amount);
+      if (numericAmount < 0.5) {
+        Alert.alert(
+          "Invalid Amount",
+          `The ride fare ($${amount}) is below Stripe's minimum charge of $0.50. Please contact support.`
+        );
+        return false;
+      }
 
       // Create payment intent using your existing API route
       const { paymentIntent, ephemeralKey, customer } = await fetchAPI(
@@ -125,7 +170,7 @@ const BookRideContent = () => {
       // Payment successful - create ride in database
       try {
         const farePrice = driverDetails.price ? parseInt(driverDetails.price.toString()) * 100 : 0;
-        const rideTime = driverDetails.time || 0;
+        const rideTime = Math.round(driverDetails.time || 0); // Round to integer (e.g., 11)
         
         await fetchAPI("/(api)/ride/create", {
           method: "POST",
@@ -139,7 +184,7 @@ const BookRideContent = () => {
             origin_longitude: userLongitude || 0,
             destination_latitude: destinationLatitude || 0,
             destination_longitude: destinationLongitude || 0,
-            ride_time: rideTime.toString(),
+            ride_time: rideTime, // Send as integer, NOT string
             fare_price: farePrice,
             payment_status: "paid",
             driver_id: driverDetails.id,
@@ -147,18 +192,14 @@ const BookRideContent = () => {
           }),
         });
 
-        Alert.alert(
-          "🎉 Ride Booked!",
-          "Your payment was successful and your ride has been confirmed.",
-          [
-            {
-              text: "View Ride",
-              onPress: () => router.push("/(root)/(tabs)/home"),
-            },
-          ]
-        );
+        // Show success modal after 500ms delay
+        setTimeout(() => {
+          setLoading(false);
+          setSuccess(true);
+        }, 500);
       } catch (rideError) {
         console.error("Error creating ride:", rideError);
+        setLoading(false);
         Alert.alert(
           "Warning",
           "Payment was successful but there was an issue saving your ride. Please contact support."
@@ -166,19 +207,21 @@ const BookRideContent = () => {
       }
     } catch (error) {
       console.error("Payment error:", error);
-      Alert.alert("Error", "An unexpected error occurred. Please try again.");
-    } finally {
       setLoading(false);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
     }
   };
 
   return (
-    <RideLayout title="Book Ride" snapPoints={["55%", "80%", "95%"]}>
-      <ScrollView
-        className="flex-1 px-5"
-        contentContainerStyle={{ paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
-      >
+    <RideLayout title="Book Ride" snapPoints={["75%","85%", "95%"]}>
+      <View className="flex-1">
+        
+        <ScrollView
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingBottom:20 }}
+          showsVerticalScrollIndicator={true}
+        >
+      
         {/* Driver Profile */}
         <View className="items-center py-4 mb-4">
           <View
@@ -188,12 +231,31 @@ const BookRideContent = () => {
               borderColor: '#3B82F6',
               borderRadius: 40,
               padding: 2,
+              backgroundColor: '#F3F4F6',
             }}
           >
-            <Image
-              source={{ uri: driverDetails.profile_image_url }}
-              className="w-16 h-16 rounded-full"
-            />
+            {!imageError && driverDetails.profile_image_url ? (
+              <Image
+                source={{ uri: driverDetails.profile_image_url }}
+                style={{ width: 64, height: 64, borderRadius: 32 }}
+                resizeMode="cover"
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <View style={{ 
+                width: 64, 
+                height: 64, 
+                borderRadius: 32, 
+                backgroundColor: '#3B82F6', 
+                justifyContent: 'center', 
+                alignItems: 'center' 
+              }}>
+                <Text style={{ fontSize: 28, color: '#FFFFFF', fontWeight: 'bold' }}>
+                  {driverDetails.first_name?.[0]}{driverDetails.last_name?.[0]}
+                </Text>
+              </View>
+            )}
           </View>
 
           <Text className="text-lg font-bold text-gray-900 mb-1">
@@ -251,7 +313,7 @@ const BookRideContent = () => {
           <View className="flex-row items-center justify-between py-2.5 border-t border-gray-200">
             <Text className="text-sm text-gray-600">Pickup Time</Text>
             <Text className="text-sm font-semibold text-gray-900">
-              {formatTime(driverDetails.time || 0)}
+              {Math.round(driverDetails.time || 0)} min
             </Text>
           </View>
 
@@ -277,16 +339,16 @@ const BookRideContent = () => {
           <Text className="text-base font-bold text-gray-900 mb-3">Route</Text>
 
           {/* Pickup */}
-          <View className="flex-row mb-3">
-            <View className="items-center mr-3 mt-1">
-              <View className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
-              <View className="w-0.5 h-full bg-gray-300 my-1" />
+          <View className="flex-row mb-4">
+            <View className="items-center mr-3">
+              <View className="w-3 h-3 bg-blue-500 rounded-full mt-1" />
+              <View className="w-0.5 flex-1 bg-gray-300 my-1" style={{ minHeight: 40 }} />
             </View>
-            <View className="flex-1">
-              <Text className="text-xs font-medium text-gray-500 uppercase mb-0.5">
+            <View className="flex-1 pt-0.5">
+              <Text className="text-xs font-medium text-gray-500 uppercase mb-1">
                 Pickup
               </Text>
-              <Text className="text-sm text-gray-900 leading-4">
+              <Text className="text-sm text-gray-900 leading-5" numberOfLines={3}>
                 {pickupAddress}
               </Text>
             </View>
@@ -294,47 +356,23 @@ const BookRideContent = () => {
 
           {/* Destination */}
           <View className="flex-row">
-            <View className="items-center mr-3 mt-1">
-              <View className="w-2.5 h-2.5 bg-green-500 rounded-full" />
+            <View className="items-center mr-3">
+              <View className="w-3 h-3 bg-green-500 rounded-full mt-1" />
             </View>
-            <View className="flex-1">
-              <Text className="text-xs font-medium text-gray-500 uppercase mb-0.5">
+            <View className="flex-1 pt-0.5">
+              <Text className="text-xs font-medium text-gray-500 uppercase mb-1">
                 Destination
               </Text>
-              <Text className="text-sm text-gray-900 leading-4">
+              <Text className="text-sm text-gray-900 leading-5" numberOfLines={3}>
                 {dropoffAddress}
               </Text>
             </View>
           </View>
         </View>
-
-        {/* Security Info */}
-        <View className="bg-blue-50 rounded-xl p-3 flex-row items-center">
-          <View className="w-8 h-8 bg-blue-100 rounded-full items-center justify-center mr-2.5">
-            <Text className="text-base">🔒</Text>
-          </View>
-          <View className="flex-1">
-            <Text className="text-xs font-semibold text-blue-900 mb-0.5">
-              Secure Payment
-            </Text>
-            <Text className="text-xs text-blue-700 leading-3">
-              Your payment info is encrypted
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-
+        </ScrollView>
+      
       {/* Fixed Bottom Button */}
-      <View
-        className="absolute bottom-0 left-0 right-0 bg-white px-5 py-4 border-t border-gray-200"
-        style={{
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-          elevation: 5,
-        }}
-      >
+      <View className="px-5 pb-14 pt-0">
         <CustomButton
           title={loading ? "Processing..." : `Pay $${driverDetails.price}`}
           onPress={handlePayment}
@@ -355,6 +393,41 @@ const BookRideContent = () => {
           By continuing, you agree to our Terms & Conditions
         </Text>
       </View>
+      
+      </View>
+
+      {/* Success Modal */}
+      <ReactNativeModal
+        isVisible={success}
+        onBackdropPress={() => setSuccess(false)}
+        animationIn="slideInUp"
+        animationOut="slideOutDown"
+        backdropOpacity={0.9}
+        useNativeDriver={true}
+        hideModalContentWhileAnimating={true}
+      >
+        <View className="flex flex-col items-center justify-center bg-white p-7 rounded-2xl mx-5">
+          <Image source={images.check} className="w-28 h-28 mt-5" />
+
+          <Text className="text-2xl text-center font-JakartaBold mt-5">
+            Booking placed successfully
+          </Text>
+
+          <Text className="text-md text-general-200 font-JakartaRegular text-center mt-3">
+            Thank you for your booking. Your reservation has been successfully
+            placed. Please proceed with your trip.
+          </Text>
+
+          <CustomButton
+            title="Back Home"
+            onPress={() => {
+              setSuccess(false);
+              router.push("/(root)/(tabs)/home");
+            }}
+            className="mt-5"
+          />
+        </View>
+      </ReactNativeModal>
     </RideLayout>
   );
 };

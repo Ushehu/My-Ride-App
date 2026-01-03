@@ -1,7 +1,7 @@
-// store/index.ts
 import { create } from 'zustand';
+import { MarkerData } from '@/types/type';
 
-// Driver Interface
+// Driver Interface (base data from database)
 export interface Driver {
   id: number;
   first_name: string;
@@ -10,20 +10,20 @@ export interface Driver {
   car_image_url: string;
   car_seats: number;
   rating: number;
-  price: string;
-  time: number;
 }
 
 // Computed property for full name
 export interface DriverWithTitle extends Driver {
   title: string;
+  price?: string;
+  time?: number;
 }
 
 // Driver Store Interface
 interface DriverStore {
-  drivers: DriverWithTitle[];
+  drivers: MarkerData[];
   selectedDriver: number | null;
-  setDrivers: (drivers: Driver[]) => void;
+  setDrivers: (drivers: MarkerData[]) => void;
   setSelectedDriver: (driverId: number) => void;
   clearSelectedDriver: () => void;
 }
@@ -54,14 +54,8 @@ export const useDriverStore = create<DriverStore>((set) => ({
   drivers: [],
   selectedDriver: null,
   
-  setDrivers: (drivers: Driver[]) => {
-    // Add computed 'title' property to each driver
-    const driversWithTitle: DriverWithTitle[] = drivers.map(driver => ({
-      ...driver,
-      title: `${driver.first_name} ${driver.last_name}`,
-    }));
-    
-    set({ drivers: driversWithTitle });
+  setDrivers: (drivers: MarkerData[]) => {
+    set({ drivers });
   },
   
   setSelectedDriver: (driverId: number) => {

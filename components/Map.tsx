@@ -15,8 +15,8 @@ const drivers: Driver[] = [
     id: 1,
     first_name: "James",
     last_name: "Wilson",
-    profile_image_url: "https://ucarecdn.com/dae59769-2c1f-48c7-driver1.jpg",
-    car_image_url: "https://ucarecdn.com/a2dc52b2-8bf7-4e49-car1.jpg",
+    profile_image_url: "https://randomuser.me/api/portraits/men/1.jpg",
+    car_image_url: "https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg",
     car_seats: 4,
     rating: 4.8
   },
@@ -24,35 +24,35 @@ const drivers: Driver[] = [
     id: 2,
     first_name: "David",
     last_name: "Brown",
-    profile_image_url: "https://ucarecdn.com/1b84ac7e-driver2.jpg",
-    car_image_url: "https://ucarecdn.com/8cf42a3e-car2.jpg",
+    profile_image_url: "https://randomuser.me/api/portraits/men/40.jpg",
+    car_image_url: "https://images.pexels.com/photos/210019/pexels-photo-210019.jpeg",
     car_seats: 4,
     rating: 4.6
   },
   {
     id: 3,
-    first_name: "Sarah",
-    last_name: "Miller",
-    profile_image_url: "https://ucarecdn.com/4c8d0201-driver3.jpg",
-    car_image_url: "https://ucarecdn.com/d6a72d30-car3.jpg",
-    car_seats: 3,
+    first_name: "Ben",
+    last_name: "Sam",
+    profile_image_url: "https://randomuser.me/api/portraits/men/30.jpg",
+    car_image_url: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=400",
+    car_seats: 4,
     rating: 4.9
   },
   {
     id: 4,
-    first_name: "Michael",
-    last_name: "Johnson",
-    profile_image_url: "https://ucarecdn.com/dae59769-driver1.jpg",
-    car_image_url: "https://ucarecdn.com/a2dc52b2-car1.jpg",
+    first_name: "Mathew",
+    last_name: "Sani",
+    profile_image_url: "https://randomuser.me/api/portraits/men/20.jpg",
+    car_image_url: "https://images.pexels.com/photos/1402787/pexels-photo-1402787.jpeg",
     car_seats: 4,
     rating: 4.7
   },
   {
     id: 5,
-    first_name: "Emily",
+    first_name: "James",
     last_name: "Davis",
-    profile_image_url: "https://ucarecdn.com/1b84ac7e-driver2.jpg",
-    car_image_url: "https://ucarecdn.com/8cf42a3e-car2.jpg",
+    profile_image_url: "https://randomuser.me/api/portraits/men/50.jpg",
+    car_image_url: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=400",
     car_seats: 3,
     rating: 4.85
   }
@@ -89,10 +89,13 @@ const Map = () => {
     destinationLongitude,
   });
 
+  // Generate initial markers and calculate times when destination is set
   useEffect(() => {
-    if (Array.isArray(drivers)) {
+    const setupDrivers = async () => {
+      if (!Array.isArray(drivers)) return;
       if (!userLatitude || !userLongitude) return;
 
+      // Generate markers with random positions near user
       const newMarkers = generateMarkersFromData({
         data: drivers,
         userLatitude,
@@ -100,11 +103,33 @@ const Map = () => {
       });
       
       setMarkers(newMarkers);
-      
-      // IMPORTANT: Set drivers in the store so confirm-ride page can access them
-      setDrivers(newMarkers);
-    }
-  }, [userLatitude, userLongitude]);
+
+      // If destination is set, calculate driver times and prices
+      if (destinationLatitude && destinationLongitude) {
+        console.log("Calculating driver times and prices...");
+        
+        const driversWithTimes = await calculateDriverTimes({
+          markers: newMarkers,
+          userLatitude,
+          userLongitude,
+          destinationLatitude,
+          destinationLongitude,
+        });
+
+        if (driversWithTimes) {
+          console.log("Drivers with calculated times:", driversWithTimes);
+          setMarkers(driversWithTimes);
+          // IMPORTANT: Update store so other pages can access price/time data
+          setDrivers(driversWithTimes);
+        }
+      } else {
+        // No destination set yet, just set markers without price/time
+        setDrivers(newMarkers);
+      }
+    };
+
+    setupDrivers();
+  }, [userLatitude, userLongitude, destinationLatitude, destinationLongitude]);
 
   // Fetch Geoapify Directions with traffic data
   useEffect(() => {

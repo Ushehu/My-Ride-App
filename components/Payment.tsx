@@ -30,17 +30,19 @@ const Payment = ({
 
   const { userId } = useAuth();
   const [success, setSuccess] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
 
   const openPaymentSheet = async () => {
+    setLoading(true);
     await initializePaymentSheet();
 
     const { error } = await presentPaymentSheet();
 
     if (error) {
+      setLoading(false);
       Alert.alert(`Error code: ${error.code}`, error.message);
-    } else {
-      setSuccess(true);
     }
+    // Note: Don't set success here - it will be set in confirmHandler
   };
 
   const initializePaymentSheet = async () => {
@@ -57,6 +59,8 @@ const Payment = ({
           intentCreationCallback,
         ) => {
           try {
+            console.log("🔄 Starting payment confirmation...");
+
             // Step 1: Create payment intent and customer
             const { paymentIntent, customer } = await fetchAPI(
               "/(api)/(stripe)/create",
@@ -75,6 +79,8 @@ const Payment = ({
             );
 
             if (paymentIntent.client_secret) {
+              console.log("✅ Payment intent created");
+
               // Step 2: Confirm payment
               const { result } = await fetchAPI("/(api)/(stripe)/pay", {
                 method: "POST",
@@ -90,6 +96,8 @@ const Payment = ({
               });
 
               if (result.client_secret) {
+                console.log("✅ Payment confirmed");
+
                 // Step 3: Create ride record in database
                 await fetchAPI("/(api)/ride/create", {
                   method: "POST",
@@ -103,7 +111,7 @@ const Payment = ({
                     origin_longitude: userLongitude,
                     destination_latitude: destinationLatitude,
                     destination_longitude: destinationLongitude,
-                    ride_time: rideTime.toFixed(0),
+                    ride_time: Math.round(rideTime), // Convert to integer
                     fare_price: parseInt(amount) * 100,
                     payment_status: "paid",
                     driver_id: driverId,
@@ -111,14 +119,24 @@ const Payment = ({
                   }),
                 });
 
+                console.log("✅ Ride created in database");
+
                 // Return client secret to complete payment
                 intentCreationCallback({
                   clientSecret: result.client_secret,
                 });
+
+                // Wait a moment for payment sheet to dismiss, then show success modal
+                setTimeout(() => {
+                  setLoading(false);
+                  setSuccess(true);
+                  console.log("🎉 Payment flow complete - showing modal");
+                }, 500); // 500ms delay to ensure payment sheet is dismissed
               }
             }
           } catch (error) {
-            console.error("Payment error:", error);
+            console.error("❌ Payment error:", error);
+            setLoading(false);
             intentCreationCallback({
               error: {
                 code: "Failed",
@@ -133,6 +151,7 @@ const Payment = ({
     });
 
     if (error) {
+      setLoading(false);
       Alert.alert("Error", error.message);
     }
   };
@@ -140,16 +159,22 @@ const Payment = ({
   return (
     <>
       <CustomButton
-        title="Confirm Ride"
+        title={loading ? "Processing..." : "Confirm Ride"}
         className="my-10"
         onPress={openPaymentSheet}
+        disabled={loading}
       />
 
       <ReactNativeModal
         isVisible={success}
         onBackdropPress={() => setSuccess(false)}
+        animationIn="slideInUp"
+        animationOut="slideOutDown"
+        backdropOpacity={0.9}
+        useNativeDriver={true}
+        hideModalContentWhileAnimating={true}
       >
-        <View className="flex flex-col items-center justify-center bg-white p-7 rounded-2xl">
+        <View className="flex flex-col items-center justify-center bg-white p-7 rounded-2xl mx-5">
           <Image source={images.check} className="w-28 h-28 mt-5" />
 
           <Text className="text-2xl text-center font-JakartaBold mt-5">

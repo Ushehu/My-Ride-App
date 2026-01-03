@@ -102,7 +102,7 @@ const ConfirmRide = () => {
               <Text className="text-sm text-gray-700">Pickup Time</Text>
             </View>
             <Text className="text-sm font-semibold text-gray-900">
-              {formatTime(driverDetails?.time || 0)}
+              {Math.round(driverDetails?.time || 0)} min
             </Text>
           </View>
 
@@ -122,50 +122,48 @@ const ConfirmRide = () => {
 
         {/* Route Card */}
         <View
-          className="bg-gray-50 rounded-2xl p-4 mb-4"
-          style={{
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 4,
-            elevation: 2,
-          }}
-        >
-          <Text className="text-base font-bold text-gray-900 mb-3">
-            Your Route
-          </Text>
-
-          {/* Pickup */}
-          <View className="flex-row mb-3">
-            <View className="items-center mr-3 mt-1">
-              <View className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
-              <View className="w-0.5 h-full bg-gray-300 my-1" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-xs font-medium text-gray-500 uppercase mb-1">
-                Pickup
-              </Text>
-              <Text className="text-sm text-gray-900 leading-5">
-                {pickupAddress}
-              </Text>
-            </View>
-          </View>
-
-          {/* Destination */}
-          <View className="flex-row">
-            <View className="items-center mr-3 mt-1">
-              <View className="w-2.5 h-2.5 bg-green-500 rounded-full" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-xs font-medium text-gray-500 uppercase mb-1">
-                Drop-off
-              </Text>
-              <Text className="text-sm text-gray-900 leading-5">
-                {dropoffAddress}
-              </Text>
-            </View>
-          </View>
-        </View>
+                  className="bg-gray-50 rounded-2xl p-4 mb-4"
+                  style={{
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  }}
+                >
+                  <Text className="text-base font-bold text-gray-900 mb-3">Route</Text>
+        
+                  {/* Pickup */}
+                  <View className="flex-row mb-4">
+                    <View className="items-center mr-3">
+                      <View className="w-3 h-3 bg-blue-500 rounded-full mt-1" />
+                      <View className="w-0.5 flex-1 bg-gray-300 my-1" style={{ minHeight: 40 }} />
+                    </View>
+                    <View className="flex-1 pt-0.5">
+                      <Text className="text-xs font-medium text-gray-500 uppercase mb-1">
+                        Pickup
+                      </Text>
+                      <Text className="text-sm text-gray-900 leading-5" numberOfLines={3}>
+                        {pickupAddress}
+                      </Text>
+                    </View>
+                  </View>
+        
+                  {/* Destination */}
+                  <View className="flex-row">
+                    <View className="items-center mr-3">
+                      <View className="w-3 h-3 bg-green-500 rounded-full mt-1" />
+                    </View>
+                    <View className="flex-1 pt-0.5">
+                      <Text className="text-xs font-medium text-gray-500 uppercase mb-1">
+                        Destination
+                      </Text>
+                      <Text className="text-sm text-gray-900 leading-5" numberOfLines={3}>
+                        {dropoffAddress}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
       </ScrollView>
 
       {/* Fixed Bottom Button */}
